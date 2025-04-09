@@ -25,6 +25,16 @@ PINNs (Physics-Informed Neural Networks) integrate physical laws (like PDEs) int
 
 ---
 
+## PDE Equations used
+
+![](./results/bs_equation.png)
+
+![](./results/heston_equation.png)
+
+
+
+---
+
 ## Project Structure
 ```bash
 ├── models/      # saved torch models
