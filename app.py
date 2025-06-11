@@ -1,5 +1,7 @@
 import streamlit as st
 import torch
+import numpy as np
+import matplotlib.pyplot as plt
 import os
 import sys
 
@@ -11,94 +13,61 @@ from src.utils.model_loader import load_bs_model, load_heston_model
 # Set page config
 st.set_page_config(
     page_title="PINN Option Pricing",
-    page_icon="📈",
     layout="wide"
 )
 
-# Custom CSS
-st.markdown("""
-    <style>
-    .stSlider > div > div > div {
-        background-color: #4CAF50;
-    }
-    .stRadio > div {
-        background-color: #f0f2f6;
-        padding: 10px;
-        border-radius: 5px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+st.title("PINN Option Pricing")
+st.markdown("Physics-Informed Neural Network for Option Pricing")
 
-st.title("📈 PINN Option Pricing")
-st.markdown("### Physics-Informed Neural Network for Option Pricing")
+# Sidebar for model selection and input
+st.sidebar.header("Choose Model")
+model_type = st.sidebar.radio("Model", ("Black-Scholes", "Heston"))
 
-# Check if model files exist
-bs_model_path = "saved_models/black_scholes_model.pth"
-heston_model_path = "saved_models/heston_model.pth"
-bs_equation_path = "results/bs_equation.png"
-heston_equation_path = "results/heston_equation.png"
+st.sidebar.header("Input Parameters")
+S = st.sidebar.slider("Stock Price ($)", 1.0, 200.0, 100.0)
+t = st.sidebar.slider("Time to Maturity (years)", 0.01, 1.0, 0.5)
 
-if not os.path.exists(bs_model_path):
-    st.error(f"Black-Scholes model file not found at {bs_model_path}")
-    st.stop()
-if not os.path.exists(heston_model_path):
-    st.error(f"Heston model file not found at {heston_model_path}")
-    st.stop()
+if model_type == "Black-Scholes":
+    model = load_bs_model()
+    input_tensor = torch.tensor([[S, t]], dtype=torch.float32)
+else:
+    v = st.sidebar.slider("Volatility (v)", 0.01, 0.5, 0.04)
+    model = load_heston_model()
+    input_tensor = torch.tensor([[S, v, t]], dtype=torch.float32)
 
-# Sidebar for model selection
-model_type = st.sidebar.radio("Choose Model", ("Black-Scholes", "Heston"))
+with torch.no_grad():
+    price = model(input_tensor).item()
 
-# Main content
-col1, col2 = st.columns(2)
+# Layout: left for price, right for plot
+tab1, tab2 = st.columns([1, 2])
 
-with col1:
-    st.subheader("Input Parameters")
-    S = st.slider("Stock Price ($)", 1.0, 200.0, 100.0, help="Current stock price")
-    t = st.slider("Time to Maturity (years)", 0.01, 1.0, 0.5, help="Time until option expiration")
-
-    if model_type == "Black-Scholes":
-        try:
-            model = load_bs_model()
-            input_tensor = torch.tensor([[S, t]], dtype=torch.float32)
-        except Exception as e:
-            st.error(f"Error loading Black-Scholes model: {str(e)}")
-            st.stop()
-    else:
-        v = st.slider("Volatility (v)", 0.01, 0.5, 0.04, help="Current volatility")
-        try:
-            model = load_heston_model()
-            input_tensor = torch.tensor([[S, v, t]], dtype=torch.float32)
-        except Exception as e:
-            st.error(f"Error loading Heston model: {str(e)}")
-            st.stop()
-
-with col2:
+with tab1:
     st.subheader("Results")
-    try:
-        with torch.no_grad():
-            price = model(input_tensor).item()
-        
-        st.metric(
-            label="Option Price",
-            value=f"${price:.4f}",
-            delta=None
-        )
-        
-        # Display model equation
-        if model_type == "Black-Scholes":
-            if os.path.exists(bs_equation_path):
-                st.image(bs_equation_path, caption="Black-Scholes PDE")
-            else:
-                st.warning("Black-Scholes equation image not found")
-        else:
-            if os.path.exists(heston_equation_path):
-                st.image(heston_equation_path, caption="Heston PDE")
-            else:
-                st.warning("Heston equation image not found")
-            
-    except Exception as e:
-        st.error(f"Error calculating option price: {str(e)}")
+    st.metric(label="Option Price", value=f"${price:.4f}")
 
-# Footer
+with tab2:
+    st.subheader(f"{model_type} PINN Option Price Surface")
+    # Generate dynamic surface plot
+    S_range = np.linspace(1, 200, 50)
+    t_range = np.linspace(0.01, 1.0, 50)
+    S_grid, t_grid = np.meshgrid(S_range, t_range)
+    if model_type == "Black-Scholes":
+        input_grid = torch.tensor(np.stack([S_grid.ravel(), t_grid.ravel()], axis=1), dtype=torch.float32)
+        with torch.no_grad():
+            price_grid = model(input_grid).numpy().reshape(S_grid.shape)
+    else:
+        v_val = v
+        v_grid = np.full_like(S_grid, v_val)
+        input_grid = torch.tensor(np.stack([S_grid.ravel(), v_grid.ravel(), t_grid.ravel()], axis=1), dtype=torch.float32)
+        with torch.no_grad():
+            price_grid = model(input_grid).numpy().reshape(S_grid.shape)
+    fig = plt.figure(figsize=(6, 5))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_surface(S_grid, t_grid, price_grid, cmap='viridis' if model_type=="Black-Scholes" else 'plasma')
+    ax.set_xlabel('Stock Price')
+    ax.set_ylabel('Time to Maturity')
+    ax.set_zlabel('Option Price')
+    st.pyplot(fig)
+
 st.markdown("---")
 st.markdown("Built with Streamlit and PyTorch")
