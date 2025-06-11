@@ -8,6 +8,8 @@ class HestonPINN(nn.Module):
             nn.Tanh(),
             nn.Linear(64, 64),
             nn.Tanh(),
+            nn.Linear(64, 64),
+            nn.Tanh(),
             nn.Linear(64, 1)
         )
 
