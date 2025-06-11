@@ -1,6 +1,6 @@
 import torch
-from models.bs_pinn import PINN
-from models.heston_pinn import HestonPINN
+from src.models.bs_pinn import PINN
+from src.models.heston_pinn import HestonPINN
 
 def load_bs_model():
     model = PINN()
